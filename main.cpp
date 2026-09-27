@@ -41,9 +41,208 @@ void print_dfa_min (const DFA& dfa_min) {
     }
 }
 
-DFA minimize_dfa (const DFA& dfa) {
+
+DFA remove_dead_and_unreachable(const DFA& dfa) {
+    // Forward reachability
+    // DFS from the start state
+    std::set<int> reachable;
+    std::vector<int> frontier = {dfa.start_state};
+    reachable.insert(dfa.start_state);
+    while (!frontier.empty()) {
+        int cur = frontier.back();
+        frontier.pop_back();
+        for (char c : dfa.alphabet) {
+            auto it = dfa.transitions.find({cur, c});
+            if (it != dfa.transitions.end()) {
+                int next = it->second;
+                if (!reachable.count(next)) {
+                    reachable.insert(next);
+                    frontier.push_back(next);
+                }
+            }
+        }
+    }
+
+    
+    // Build the reversed transition graph
+    std::map<int, std::vector<int>> reverse_trans;
+    for (const auto& t : dfa.transitions) {
+        int from = t.first.first;
+        int to   = t.second;
+        if (reachable.count(from) && reachable.count(to)) {
+            reverse_trans[to].push_back(from);
+        }
+    }
+
+    // DFS backwards from every accepting state
+    std::set<int> live;
+    std::vector<int> back_frontier;
+    for (int a : dfa.accept_states) {
+        if (reachable.count(a)) {
+            live.insert(a);
+            back_frontier.push_back(a);
+        }
+    }
+    while (!back_frontier.empty()) {
+        int cur = back_frontier.back();
+        back_frontier.pop_back();
+        for (int prev : reverse_trans[cur]) {
+            if (!live.count(prev)) {
+                live.insert(prev);
+                back_frontier.push_back(prev);
+            }
+        }
+    }
+
+    // Valid states
+    std::set<int> valid;
+    for (int s : reachable) {
+        if (live.count(s))
+            valid.insert(s);
+    }
+
+    // Build clean DFA keeping only valid states 
+    DFA clean;
+    clean.alphabet    = dfa.alphabet;
+    clean.states      = valid;
+    clean.start_state = dfa.start_state;
+
+    for (int s : dfa.accept_states)
+        if (valid.count(s))
+            clean.accept_states.insert(s);
+
+    for (const auto& t : dfa.transitions) {
+        int  from = t.first.first;
+        char c    = t.first.second;
+        int  to   = t.second;
+        if (valid.count(from) && valid.count(to))
+            clean.transitions[{from, c}] = to;
+    }
+
+    return clean;
+}
+
+DFA minimize_dfa(const DFA& dfa) {
+    // Remove unreachable and dead states
+    DFA clean = remove_dead_and_unreachable(dfa);
+    const std::set<int>& reachable = clean.states;
+
+    // Split valid states into accepting and non-accepting
+    std::set<int> F, nonF;
+    for (int s : reachable) {
+        if (clean.accept_states.count(s))
+            F.insert(s);
+        else
+            nonF.insert(s);
+    }
+
+    // Hopcroft's partition refinement algorithm
+    std::vector<std::set<int>> P;
+    if (!F.empty())    P.push_back(F);
+    if (!nonF.empty()) P.push_back(nonF);
+
+    std::vector<std::set<int>> W;
+    if (!F.empty())    W.push_back(F);
+    if (!nonF.empty()) W.push_back(nonF);
+
+    while (!W.empty()) {
+        // Pop block A from W
+        std::set<int> A = W.back();
+        W.pop_back();
+
+        for (char c : clean.alphabet) {
+            
+            std::set<int> X;
+            for (int q : reachable) {
+                auto it = clean.transitions.find({q, c});
+                if (it != clean.transitions.end() && A.count(it->second)) {
+                    X.insert(q);
+                }
+            }
+            if (X.empty()) continue;
+
+            std::vector<std::set<int>> newP;
+            for (auto& Y : P) {
+                std::set<int> Y1, Y2;
+                for (int s : Y) {
+                    if (X.count(s)) Y1.insert(s);
+                    else            Y2.insert(s);
+                }
+                if (Y1.empty() || Y2.empty()) {
+                    newP.push_back(Y);
+                    continue;
+                }
+            
+                newP.push_back(Y1);
+                newP.push_back(Y2);
+
+                bool Y_in_W = false;
+                for (auto& w : W) {
+                    if (w == Y) { Y_in_W = true; break; }
+                }
+                if (Y_in_W) {
+                    std::vector<std::set<int>> newW;
+                    for (auto& w : W) {
+                        if (w == Y) {
+                            newW.push_back(Y1);
+                            newW.push_back(Y2);
+                        } else {
+                            newW.push_back(w);
+                        }
+                    }
+                    W = newW;
+                } else {
+                    if (Y1.size() <= Y2.size())
+                        W.push_back(Y1);
+                    else
+                        W.push_back(Y2);
+                }
+            }
+            P = newP;
+        }
+    }
+
+    // Build the minimized DFA
+    std::map<int, int> state_to_block;
+    for (int i = 0; i < (int)P.size(); i++) {
+        for (int s : P[i]) {
+            state_to_block[s] = i;
+        }
+    }
+
     DFA dfa_min;
-    // TODO: Implementar el algoritmo de refinamiento de particiones
+    dfa_min.alphabet = clean.alphabet;
+
+    // States of the minimized DFA = block indices
+    for (int i = 0; i < (int)P.size(); i++) {
+        dfa_min.states.insert(i);
+    }
+
+    // Start state
+    dfa_min.start_state = state_to_block[clean.start_state];
+
+    // Accept states
+    for (int i = 0; i < (int)P.size(); i++) {
+        for (int s : P[i]) {
+            if (clean.accept_states.count(s)) {
+                dfa_min.accept_states.insert(i);
+                break;
+            }
+        }
+    }
+
+    // Transitions
+    for (int i = 0; i < (int)P.size(); i++) {
+        int rep = *P[i].begin();
+        for (char c : clean.alphabet) {
+            auto it = clean.transitions.find({rep, c});
+            if (it != clean.transitions.end()) {
+                int dest_block = state_to_block[it->second];
+                dfa_min.transitions[{i, c}] = dest_block;
+            }
+        }
+    }
+
     return dfa_min;
 }
 
@@ -90,7 +289,7 @@ int main () {
     std :: cout << "\nOMAGOTO -----------------------------\n";
 
     DFA dfa_original ;
-    // TODO: Construir el DFA original a partir de su pipeline de regex
+    // TODO: Build the original DFA from your regex pipeline
 
     print_dfa ( dfa_original );
 
@@ -103,11 +302,11 @@ int main () {
                     size () << "\n";
 
     std :: vector <std :: string > accept_strings = {
-    // Colocar 10 cadenas que deben ser aceptadas
+    // Add 10 strings that must be accepted
     };
 
     std :: vector <std :: string > reject_strings = {
-    // Colocar 10 cadenas que deben ser rechazadas
+    // Add 10 strings that must be rejected
     };
 
     run_test_suite (dfa_min , accept_strings , reject_strings );
