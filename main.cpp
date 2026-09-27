@@ -17,6 +17,28 @@ struct DFA {
     std ::map <std ::pair <int, char >, int> transitions ;
 };
 
+DFA convert_dfa_to_cpp(const dfa& c_dfa) {
+    DFA cpp_dfa;
+
+    for (int state = 0; state < c_dfa.length_states; ++state) {
+        cpp_dfa.states.insert(state);
+    }
+
+    cpp_dfa.start_state = c_dfa.start;
+
+    for (int i = 0; i < c_dfa.length_accept_states; ++i) {
+        cpp_dfa.accept_states.insert(c_dfa.accept_states[i]);
+    }
+
+    for (int i = 0; i < c_dfa.length_transitions; ++i) {
+        const transition& current = c_dfa.transitions[i];
+        cpp_dfa.alphabet.insert(current.symbol);
+        cpp_dfa.transitions[{current.start, current.symbol}] = current.finish;
+    }
+
+    return cpp_dfa;
+}
+
 void print_dfa (const DFA& dfa) {
     std :: cout << "--- Tabla de Transiciones (DFA Original) ---\n";
     std :: cout << "Estado Inicial: " << dfa. start_state << "\n";
