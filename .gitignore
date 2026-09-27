@@ -1,0 +1,14 @@
+#Ignorar absolutamente todo por defecto
+*
+
+#No ignorar las carpetas, para que Git pueda buscar archivos dentro de ellas
+!*/
+
+#Permitir explícitamente los archivos de código fuente y cabeceras
+!*.c
+!*.cpp
+!*.h
+
+#Permitir el propio archivo .gitignore y el archivo README
+!.gitignore
+!README.md
