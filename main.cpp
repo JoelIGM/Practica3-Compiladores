@@ -64,7 +64,7 @@ void print_dfa_min (const DFA& dfa_min) {
 }
 
 DFA minimize_dfa (const DFA& dfa) {
-    DFA dfa_min;
+    DFA dfa_min{};
     // TODO: Implementar el algoritmo de refinamiento de particiones
     return dfa_min;
 }
@@ -79,6 +79,45 @@ bool test_string (const DFA& dfa , const std :: string& input) {
     current = it ->second;
     }
     return dfa. accept_states .count(current) > 0;
+}
+
+void test_dfa_conversion() {
+    int nfa_states_0[] = {0};
+    int nfa_states_1[] = {1};
+    dfa_state states[] = {
+        {nfa_states_0, 1},
+        {nfa_states_1, 1}
+    };
+    transition transitions[] = {
+        {0, 1, 'a'},
+        {1, 1, 'a'}
+    };
+    int accept_states[] = {1};
+
+    dfa c_dfa = {
+        states,
+        2,
+        transitions,
+        2,
+        0,
+        accept_states,
+        1
+    };
+
+    DFA cpp_dfa = convert_dfa_to_cpp(c_dfa);
+
+    assert(cpp_dfa.states == std::set<int>({0, 1}));
+    assert(cpp_dfa.alphabet == std::set<char>({'a'}));
+    assert(cpp_dfa.start_state == 0);
+    assert(cpp_dfa.accept_states == std::set<int>({1}));
+    assert(cpp_dfa.transitions.at({0, 'a'}) == 1);
+    assert(cpp_dfa.transitions.at({1, 'a'}) == 1);
+    assert(!test_string(cpp_dfa, ""));
+    assert(test_string(cpp_dfa, "a"));
+    assert(test_string(cpp_dfa, "aaaa"));
+    assert(!test_string(cpp_dfa, "b"));
+
+    std::cout << "Prueba de conversion dfa -> DFA superada.\n";
 }
 
 void run_test_suite (const DFA& dfa ,
@@ -106,12 +145,14 @@ void run_test_suite (const DFA& dfa ,
 }
 
 int main () {
+    test_dfa_conversion();
+
     std :: cout << "\nPROBAMOOOOOS C ----------------------\n";
     transition t = {0, 1, 'a'};
     std::cout << "start: " << t.start << ", finish: " << t.finish << ", symbol: " << t.symbol << std::endl;
     std :: cout << "\nOMAGOTO -----------------------------\n";
 
-    DFA dfa_original ;
+    DFA dfa_original{};
     // TODO: Construir el DFA original a partir de su pipeline de regex
 
     print_dfa ( dfa_original );
